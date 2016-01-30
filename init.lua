@@ -17,14 +17,21 @@ minetest.register_tool("linemaker:tool", {
 			return
 		end
 
-		tool_active = true
-
 		local pname = player:get_player_name()
+
+		if playerdata[pname] then
+			return
+		end
 
 		playerdata[pname] = {
 			range = 6,--vector.subtract()
 			ps = {[0] = pt.under, pt.above},
 		}
+
+		minetest.after(0.5, function(player)
+			tool_active = true
+
+		end, player)
 --[[
 		local keys = placer:get_player_control()
 		local name = placer:get_player_name()
@@ -60,6 +67,26 @@ minetest.register_tool("linemaker:tool", {
 	end,
 })
 
+local objects = {}
+local function update_objects(pname)
+	local ops = objects[pname] or {}
+	local ps = playerdata[pname].ps
+	if #ops == #ps then
+		return
+	end
+	if #ops < #ps then
+		for i = #ops+1,#ps do
+			local p = ps[i]
+			ops[i] = 1--add_object(p)
+		end
+		return
+	end
+	for i = #ps+1,#ops do
+		local p = ps[i]
+		ops[i] = nil--add_object(p)
+	end
+end
+
 -- update to new positions
 minetest.register_globalstep(function(dtime)
 	-- abort if noone uses it
@@ -79,16 +106,20 @@ minetest.register_globalstep(function(dtime)
 		local player = minetest.get_player_by_name(pname)
 
 		local ps = data.ps
+		local playerpos = player:getpos()
+		playerpos.y = playerpos.y+1.625
 		local wantedpos = vector.round(
 			vector.add(
-				player:getpos(),
+				playerpos,
 				vector.multiply(player:get_look_dir(), data.range)
 			)
 		)
 		if not vector.equals(ps[#ps], wantedpos) then
-			for i,p in pairs(vector.line(ps[1], wantedpos) do
-				ps[i] = p
-			end
+			local under = ps[0]
+			ps = vector.line(ps[1], wantedpos)
+			ps[0] = under
+			playerdata[pname].ps = ps
+			update_objects(pname)
 		end
 
 		if player:get_wielded_item():to_string() == "linemaker:tool"
