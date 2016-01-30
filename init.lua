@@ -1,16 +1,27 @@
 local load_time_start = os.clock()
 
 
-local creative_enabled = minetest.setting_getbool("creative_mode")
+-- a node for playing sound when
+minetest.register_node("linemaker:soundnode", {
+	sounds = {place = "default_place_node"},
+	on_construct = function(pos)
+		minetest.after(0, function(pos)
+			if minetest.get_node(pos).name == "linemaker:soundnode" then
+				minetest.remove_node(pos)
+			end
+		end, pos)
+	end,
+})
 
 local playerdata = {}
 local tool_active
 
+-- the tool
 minetest.register_tool("linemaker:tool", {
 	description = "pull lines",
 	inventory_image = "linemaker.png",
 	stack_max = 1,
-	--node_placement_prediction = nil,
+	node_placement_prediction = "linemaker:soundnode",
 	on_place = function(itemstack, player, pt)
 		if not player
 		or not pt then
@@ -25,48 +36,47 @@ minetest.register_tool("linemaker:tool", {
 
 		playerdata[pname] = {
 			range = 6,--vector.subtract()
-			ps = {[0] = pt.under, pt.above},
+			ps = {pt.above},
+			pt = pt,
 		}
 
-		minetest.after(0.5, function(player)
+		minetest.after(0.5, function()
+			-- doesn't work mltiplayer this way I guess
 			tool_active = true
-
-		end, player)
---[[
-		local keys = placer:get_player_control()
-		local name = placer:get_player_name()
-
-		if keys.aux1 then
-			local item = itemstack:to_table()
-			local node, mode = get_data(item)
-			mode = modes[modes[mode]%#modes+1]
-			set_data(item, node, mode)
-			itemstack:replace(item)
-			inform(name, "Mode changed to: "..mode..": "..mode_infos[mode])
-			return itemstack
-		end
-
-		-- just place the stored node if now new one is to be selected
-		if not keys.sneak then
-			return replacer.replace(itemstack, placer, pt, true)
-		end
-
-
-		if pt.type ~= "node" then
-			inform(name, "	Error: No node selected.")
-			return
-		end
-
-		local item = itemstack:to_table()
-		local node, mode = get_data(item)
-
-		node = minetest.get_node_or_nil(pt.under) or node
-
-		set_data(item, node, mode)
-		itemstack:replace(item)]]
+		end)
 	end,
 })
 
+-- an entity for seeing the ps
+minetest.register_entity("linemaker:entity", {
+	collisionbox = {0,0,0,0,0,0},
+	visual = "cube",
+	visual_size = {x=0.5, y=0.5},
+	textures = {
+		"default_stone.png", "default_stone.png", "default_stone.png", "default_stone.png", "default_stone.png", "default_stone.png",
+	},
+	timer = 0,
+	on_step = function(self)
+		if not self.pname
+		or not self.id
+		or not playerdata[self.pname]
+		or not playerdata[self.pname].ps[self.id] then
+			self.object:remove()
+			return
+		end
+		local shpos = playerdata[self.pname].ps[self.id]
+		local ispos = vector.round(self.object:getpos())
+		if vector.equals(shpos, ispos) then
+			return
+		end
+		self.object:moveto(shpos)
+	end,
+	on_serialize = function(self)
+		self.object:remove()
+	end,
+})
+
+-- updates object existencies
 local objects = {}
 local function update_objects(pname)
 	local ops = objects[pname] or {}
@@ -77,15 +87,23 @@ local function update_objects(pname)
 	if #ops < #ps then
 		for i = #ops+1,#ps do
 			local p = ps[i]
-			ops[i] = 1--add_object(p)
+			local obj = minetest.add_entity(p, "linemaker:entity")
+			local ent = obj:get_luaentity()
+			ent.pname = pname
+			ent.id = i
+			ops[i] = obj
 		end
+		objects[pname] = ops
 		return
 	end
 	for i = #ps+1,#ops do
 		local p = ps[i]
 		ops[i] = nil--add_object(p)
 	end
+	objects[pname] = ops
 end
+
+local creative_enabled = minetest.setting_getbool("creative_mode")
 
 -- update to new positions
 minetest.register_globalstep(function(dtime)
@@ -105,6 +123,7 @@ minetest.register_globalstep(function(dtime)
 	for pname,data in pairs(playerdata) do
 		local player = minetest.get_player_by_name(pname)
 
+		local pt = data.pt
 		local ps = data.ps
 		local playerpos = player:getpos()
 		playerpos.y = playerpos.y+1.625
@@ -115,10 +134,7 @@ minetest.register_globalstep(function(dtime)
 			)
 		)
 		if not vector.equals(ps[#ps], wantedpos) then
-			local under = ps[0]
-			ps = vector.line(ps[1], wantedpos)
-			ps[0] = under
-			playerdata[pname].ps = ps
+			playerdata[pname].ps = vector.line(pt.above, wantedpos)
 			update_objects(pname)
 		end
 
@@ -126,8 +142,20 @@ minetest.register_globalstep(function(dtime)
 		and player:get_player_control().RMB then
 			active = true
 		else
+			local inv = player:get_inventory()
+			local stackid = player:get_wield_index()+1
+			ps[0] = pt.under
 			for i = 1,#ps do
-				minetest.set_node(ps[i], {name="default:wood"})
+				local item, success = minetest.item_place_node(
+					inv:get_stack("main", stackid),
+					player,
+					{under = ps[i-1], aboce = ps[i]}
+				)
+				print(tostring(success)) -- why is success always false?
+				inv:set_stack("main",
+					stackid,
+					item
+				)
 			end
 			playerdata[pname] = nil
 		end
@@ -138,6 +166,7 @@ minetest.register_globalstep(function(dtime)
 		tool_active = false
 	end
 end)
+
 
 local time = math.floor(tonumber(os.clock()-load_time_start)*100+0.5)/100
 local msg = "[linemaker] loaded after ca. "..time
