@@ -36,14 +36,29 @@ minetest.register_tool("linemaker:tool", {
 	end,
 })
 
+-- used when setting up an object
+local function textures_for_entity(nodename)
+	local textures
+	local def = minetest.registered_nodes[nodename]
+	if def then
+		textures = def.tiles or def.tile_images
+	end
+	textures = textures or {"unknown_node.png"}
+	if #textures == 6 then
+		return textures
+	end
+	local ltex = textures[#textures]
+	for i = #textures+1, 6 do
+		textures[i] = ltex
+	end
+	return textures
+end
+
 -- an entity for seeing the ps
 minetest.register_entity("linemaker:entity", {
 	collisionbox = {0,0,0,0,0,0},
 	visual = "cube",
 	visual_size = {x=0.5, y=0.5},
-	textures = {
-		"default_stone.png", "default_stone.png", "default_stone.png", "default_stone.png", "default_stone.png", "default_stone.png",
-	},
 	timer = 0,
 	on_step = function(self)
 		if not self.pname
@@ -67,27 +82,37 @@ minetest.register_entity("linemaker:entity", {
 
 -- updates object existencies
 local objects = {}
-local function update_objects(pname)
+local function update_objects(pname, player)
 	local ops = objects[pname] or {}
 	local ps = playerdata[pname].ps
 	if #ops == #ps then
 		return
 	end
 	if #ops < #ps then
-		for i = #ops+1,#ps do
-			local p = ps[i]
-			local obj = minetest.add_entity(p, "linemaker:entity")
-			local ent = obj:get_luaentity()
-			ent.pname = pname
-			ent.id = i
-			ops[i] = obj
+		--for i = #ops+1,#ps do
+		local textures
+		for i = 1,#ps do
+			if not ops[i] then
+				textures = textures or textures_for_entity(
+					player:get_inventory():get_stack(
+						"main",
+						player:get_wield_index()+1
+					):to_string()
+				)
+				local p = ps[i]
+				local obj = minetest.add_entity(p, "linemaker:entity")
+				obj:set_properties({textures = textures})
+				local ent = obj:get_luaentity()
+				ent.pname = pname
+				ent.id = i
+				ops[i] = obj
+			end
 		end
 		objects[pname] = ops
 		return
 	end
 	for i = #ps+1,#ops do
-		local p = ps[i]
-		ops[i] = nil--add_object(p)
+		ops[i] = nil
 	end
 	objects[pname] = ops
 end
@@ -124,7 +149,7 @@ minetest.register_globalstep(function(dtime)
 		)
 		if not vector.equals(ps[#ps], wantedpos) then
 			playerdata[pname].ps = vector.line(pt.above, wantedpos)
-			update_objects(pname)
+			update_objects(pname, player)
 		end
 
 		if player:get_wielded_item():to_string() == "linemaker:tool"
@@ -135,16 +160,14 @@ minetest.register_globalstep(function(dtime)
 			local stackid = player:get_wield_index()+1
 			ps[0] = pt.under
 			for i = 1,#ps do
-				local item, success = minetest.item_place_node(
+				local item, success = minetest.item_place(
 					inv:get_stack("main", stackid),
 					player,
-					{under = ps[i-1], aboce = ps[i]}
+					{under = ps[i-1], above = ps[i], type = "node"}
 				)
-				print(tostring(success)) -- why is success always false?
-				inv:set_stack("main",
-					stackid,
-					item
-				)
+				if success then
+					inv:set_stack("main", stackid, item)
+				end
 			end
 			playerdata[pname] = nil
 		end
