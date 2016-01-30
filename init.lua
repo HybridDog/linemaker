@@ -1,5 +1,8 @@
 local load_time_start = os.clock()
 
+local function infolog(txt)
+	minetest.log("info", "[linemaker] "..txt)
+end
 
 local playerdata = {}
 local tool_active
@@ -9,14 +12,13 @@ minetest.register_tool("linemaker:tool", {
 	description = "pull lines",
 	inventory_image = "linemaker.png",
 	stack_max = 1,
-	on_place = function(itemstack, player, pt)
+	on_place = function(_, player, pt)
 		if not player
 		or not pt then
 			return
 		end
 
 		local pname = player:get_player_name()
-
 		if playerdata[pname] then
 			return
 		end
@@ -25,16 +27,31 @@ minetest.register_tool("linemaker:tool", {
 			range = 6,--vector.subtract()
 			ps = {pt.above},
 			pt = pt,
+			disabletimer = 0.5,
 		}
+		tool_active = true
 
-		minetest.after(0.5, function()
-			-- doesn't work mltiplayer this way I guess
-			tool_active = true
-		end)
+		minetest.sound_play("linemaker", {pos = pt.above})
 
-		minetest.sound_play("superpick", {pos = pt.above})
+		infolog(pname.." places with linemaker "..dump(playerdata[pname]))
 	end,
 })
+
+-- update startpos when punching sth
+minetest.register_on_punchnode(function(_,_, player, pt)
+	if not pt
+	or player:get_wielded_item():to_string() ~= "linemaker:tool" then
+		return
+	end
+
+	local pname = player:get_player_name()
+	if not playerdata[pname] then
+		return
+	end
+	playerdata[pname].pt = pt
+
+	infolog(pname.." changed pt to "..dump(pt))
+end)
 
 -- used when setting up an object
 local function textures_for_entity(nodename)
@@ -59,7 +76,10 @@ minetest.register_entity("linemaker:entity", {
 	collisionbox = {0,0,0,0,0,0},
 	visual = "cube",
 	visual_size = {x=0.5, y=0.5},
-	timer = 0,
+	--automatic_rotate = math.pi*2 /-(60*24), -- 1 rotation every hour
+	automatic_face_movement_dir = 90,
+	automatic_face_movement_max_rotation_per_sec = 360*2,
+	makes_footstep_sound = true,
 	on_step = function(self)
 		if not self.pname
 		or not self.id
@@ -69,14 +89,31 @@ minetest.register_entity("linemaker:entity", {
 			return
 		end
 		local shpos = playerdata[self.pname].ps[self.id]
-		local ispos = vector.round(self.object:getpos())
-		if vector.equals(shpos, ispos) then
+		local ispos = self.object:getpos()
+		if vector.equals(shpos, vector.divide(
+			vector.round(vector.multiply(ispos, 5)),
+			5
+		)) then
+			-- reduce lag
 			return
 		end
-		self.object:moveto(shpos)
+
+		-- [[ accelerate to its goal
+		--shpos = vector.divide(vector.add(shpos, ispos), 2)
+		local t = 0.3
+		local acc = {}
+		local vel = self.object:getvelocity()
+		for c,v in pairs(shpos) do
+			acc[c] =(v-ispos[c]-vel[c]*t)/(t*t)
+		end
+
+		self.object:setacceleration(acc)--]]
+
+		-- self.object:moveto(shpos)
 	end,
 	on_serialize = function(self)
 		self.object:remove()
+		infolog("obj removed because it wanted to serialize")
 	end,
 })
 
@@ -90,7 +127,7 @@ local function update_objects(pname, player)
 	end
 	if #ops < #ps then
 		--for i = #ops+1,#ps do
-		local textures
+		local textures, spawnpos
 		for i = 1,#ps do
 			if not ops[i] then
 				textures = textures or textures_for_entity(
@@ -99,8 +136,9 @@ local function update_objects(pname, player)
 						player:get_wield_index()+1
 					):to_string()
 				)
-				local p = ps[i]
-				local obj = minetest.add_entity(p, "linemaker:entity")
+				spawnpos = spawnpos or playerdata[pname].pt.above
+
+				local obj = minetest.add_entity(spawnpos, "linemaker:entity")
 				obj:set_properties({textures = textures})
 				local ent = obj:get_luaentity()
 				ent.pname = pname
@@ -117,28 +155,17 @@ local function update_objects(pname, player)
 	objects[pname] = ops
 end
 
-local creative_enabled = minetest.setting_getbool("creative_mode")
-
--- update to new positions
-minetest.register_globalstep(function(dtime)
-	-- abort if noone uses it
-	if not tool_active then
-		return
-	end
-
-	--[[ abort that it doesn't shoot too often (change it if your pc runs faster)
-	timer = timer+dtime
-	if timer < 0.1 then
-		return
-	end
-	timer = 0 --]]
-
+-- what happens when it's active
+local function do_linemaker_step(dtime)
 	local active
 	for pname,data in pairs(playerdata) do
 		local player = minetest.get_player_by_name(pname)
 
 		local pt = data.pt
 		local ps = data.ps
+		local disabletimer = data.disabletimer
+
+		-- update objects and positions
 		local playerpos = player:getpos()
 		playerpos.y = playerpos.y+1.625
 		local wantedpos = vector.round(
@@ -152,9 +179,17 @@ minetest.register_globalstep(function(dtime)
 			update_objects(pname, player)
 		end
 
+		-- place if not longer holding RMB etc.
 		if player:get_wielded_item():to_string() == "linemaker:tool"
 		and player:get_player_control().RMB then
 			active = true
+		elseif disabletimer then
+			active = true
+			disabletimer = disabletimer-dtime
+			if disabletimer < 0 then
+				disabletimer = nil
+			end
+			playerdata[pname].disabletimer = disabletimer
 		else
 			local inv = player:get_inventory()
 			local stackid = player:get_wield_index()+1
@@ -176,6 +211,13 @@ minetest.register_globalstep(function(dtime)
 	-- disable the function if noone currently uses it to reduce lag
 	if not active then
 		tool_active = false
+	end
+end
+
+minetest.register_globalstep(function(dtime)
+	-- only execute function if sb uses it
+	if tool_active then
+		do_linemaker_step(dtime)
 	end
 end)
 
