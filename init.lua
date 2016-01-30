@@ -1,18 +1,6 @@
 local load_time_start = os.clock()
 
 
--- a node for playing sound when
-minetest.register_node("linemaker:soundnode", {
-	sounds = {place = "default_place_node"},
-	on_construct = function(pos)
-		minetest.after(0, function(pos)
-			if minetest.get_node(pos).name == "linemaker:soundnode" then
-				minetest.remove_node(pos)
-			end
-		end, pos)
-	end,
-})
-
 local playerdata = {}
 local tool_active
 
@@ -21,7 +9,6 @@ minetest.register_tool("linemaker:tool", {
 	description = "pull lines",
 	inventory_image = "linemaker.png",
 	stack_max = 1,
-	node_placement_prediction = "linemaker:soundnode",
 	on_place = function(itemstack, player, pt)
 		if not player
 		or not pt then
@@ -44,6 +31,8 @@ minetest.register_tool("linemaker:tool", {
 			-- doesn't work mltiplayer this way I guess
 			tool_active = true
 		end)
+
+		minetest.sound_play("superpick", {pos = pt.above})
 	end,
 })
 
