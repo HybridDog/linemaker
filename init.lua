@@ -24,6 +24,7 @@ minetest.register_tool("linemaker:tool", {
 		end
 
 		if player:get_player_control().aux1 then
+			minetest.sound_play("linemaker_config", {pos = pt.above})
 			pt.under, pt.above = pt.above, pt.under
 		end
 
@@ -38,7 +39,7 @@ minetest.register_tool("linemaker:tool", {
 		}
 		tool_active = true
 
-		minetest.sound_play("linemaker", {pos = pt.above})
+		minetest.sound_play("linemaker_place", {pos = pt.above})
 
 		infolog(pname.." places with linemaker "..dump(playerdata[pname]))
 	end,
@@ -58,15 +59,18 @@ minetest.register_on_punchnode(function(_,_, player, pt)
 	local pcontrol = player:get_player_control()
 
 	if pcontrol.aux1 then
+		minetest.sound_play("linemaker_config", {pos = pt.above})
 		pt.under, pt.above = pt.above, pt.under
 	end
 
 	if pcontrol.sneak then
 		playerdata[pname].pt = pt
+		minetest.sound_play("linemaker_place", {pos = pt.above})
 		infolog(pname.." changed pt to "..dump(pt))
 		return
 	end
 
+	minetest.sound_play("linemaker_range", {pos = pt.above})
 	local playerpos = player:getpos()
 	playerpos.y = playerpos.y+1.625
 	local range = vector.length(vector.subtract(playerpos, pt.above))
@@ -81,7 +85,13 @@ local function textures_for_entity(nodename)
 	if def then
 		textures = def.tiles or def.tile_images
 	end
-	textures = textures or {"unknown_node.png"}
+	if not textures then
+		if def.inventory_image then
+			textures = {def.inventory_image}
+		else
+			textures = {"unknown_node.png"}
+		end
+	end
 	if #textures == 6 then
 		return textures
 	end
@@ -175,7 +185,10 @@ local function update_objects(pname, player)
 		return
 	end
 	for i = #ps+1,#ops do
-		ops[i] = nil
+		if ops[i] then
+			ops[i]:remove()
+			ops[i] = nil
+		end
 	end
 	objects[pname] = ops
 end
@@ -212,6 +225,7 @@ local function do_linemaker_step(dtime)
 			wantedpos[o] = pt.above[o]
 		end
 		if not vector.equals(ps[#ps], wantedpos) then
+			minetest.sound_play("linemaker_update", {pos = wantedpos})
 			playerdata[pname].ps = vector.line(pt.above, wantedpos)
 			update_objects(pname, player)
 		end
@@ -228,6 +242,7 @@ local function do_linemaker_step(dtime)
 			end
 			playerdata[pname].disabletimer = disabletimer
 		else
+			playerdata[pname] = nil
 			local abortonfail = pcontrol.up and pcontrol.down
 			local inv = player:get_inventory()
 			local stackid = player:get_wield_index()+1
@@ -244,7 +259,7 @@ local function do_linemaker_step(dtime)
 					break
 				end
 			end
-			playerdata[pname] = nil
+			minetest.sound_play("linemaker_set", {pos = ps[#ps]})
 		end
 	end
 
@@ -255,7 +270,7 @@ local function do_linemaker_step(dtime)
 end
 
 minetest.register_globalstep(function(dtime)
-	-- only execute function if sb uses it
+	-- only execute function if sb uses the tool
 	if tool_active then
 		do_linemaker_step(dtime)
 	end
