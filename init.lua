@@ -23,8 +23,15 @@ minetest.register_tool("linemaker:tool", {
 			return
 		end
 
+		if player:get_player_control().aux1 then
+			pt.under, pt.above = pt.above, pt.under
+		end
+
+		local playerpos = player:getpos()
+		playerpos.y = playerpos.y+1.625
+
 		playerdata[pname] = {
-			range = 6,--vector.subtract()
+			range = vector.length(vector.subtract(playerpos, pt.above)),
 			ps = {pt.above},
 			pt = pt,
 			disabletimer = 0.5,
@@ -48,9 +55,23 @@ minetest.register_on_punchnode(function(_,_, player, pt)
 	if not playerdata[pname] then
 		return
 	end
-	playerdata[pname].pt = pt
+	local pcontrol = player:get_player_control()
 
-	infolog(pname.." changed pt to "..dump(pt))
+	if pcontrol.aux1 then
+		pt.under, pt.above = pt.above, pt.under
+	end
+
+	if pcontrol.sneak then
+		playerdata[pname].pt = pt
+		infolog(pname.." changed pt to "..dump(pt))
+		return
+	end
+
+	local playerpos = player:getpos()
+	playerpos.y = playerpos.y+1.625
+	local range = vector.length(vector.subtract(playerpos, pt.above))
+	playerdata[pname].range = range
+	infolog(pname.." changed range to "..range)
 end)
 
 -- used when setting up an object
@@ -91,16 +112,20 @@ minetest.register_entity("linemaker:entity", {
 		local shpos = playerdata[self.pname].ps[self.id]
 		local ispos = self.object:getpos()
 		if vector.equals(shpos, vector.divide(
-			vector.round(vector.multiply(ispos, 5)),
-			5
+			vector.round(vector.multiply(ispos, 100)),
+			100
 		)) then
-			-- reduce lag
+			if self.object:getyaw() ~= 0 then
+				self.object:setacceleration(vector.zero)
+				self.object:setvelocity(vector.zero)
+				self.object:setyaw(0)
+			end
 			return
 		end
 
 		-- [[ accelerate to its goal
-		--shpos = vector.divide(vector.add(shpos, ispos), 2)
-		local t = 0.3
+		shpos = vector.divide(vector.add(shpos, ispos), 2)
+		local t = 0.1
 		local acc = {}
 		local vel = self.object:getvelocity()
 		for c,v in pairs(shpos) do
@@ -160,6 +185,7 @@ local function do_linemaker_step(dtime)
 	local active
 	for pname,data in pairs(playerdata) do
 		local player = minetest.get_player_by_name(pname)
+		local pcontrol = player:get_player_control()
 
 		local pt = data.pt
 		local ps = data.ps
@@ -174,6 +200,17 @@ local function do_linemaker_step(dtime)
 				vector.multiply(player:get_look_dir(), data.range)
 			)
 		)
+		if pcontrol.right
+		and pcontrol.left then
+			local pdif = vector.subtract(pt.above, wantedpos)
+			local _,o1,o2 = vector.get_max_coords(vector.apply(pdif, math.abs))
+			wantedpos[o1] = pt.above[o1]
+			wantedpos[o2] = pt.above[o2]
+		elseif pcontrol.aux1 then
+			local pdif = vector.subtract(pt.above, wantedpos)
+			local _,_,o = vector.get_max_coords(vector.apply(pdif, math.abs))
+			wantedpos[o] = pt.above[o]
+		end
 		if not vector.equals(ps[#ps], wantedpos) then
 			playerdata[pname].ps = vector.line(pt.above, wantedpos)
 			update_objects(pname, player)
@@ -181,7 +218,7 @@ local function do_linemaker_step(dtime)
 
 		-- place if not longer holding RMB etc.
 		if player:get_wielded_item():to_string() == "linemaker:tool"
-		and player:get_player_control().RMB then
+		and pcontrol.RMB then
 			active = true
 		elseif disabletimer then
 			active = true
@@ -191,6 +228,7 @@ local function do_linemaker_step(dtime)
 			end
 			playerdata[pname].disabletimer = disabletimer
 		else
+			local abortonfail = pcontrol.up and pcontrol.down
 			local inv = player:get_inventory()
 			local stackid = player:get_wield_index()+1
 			ps[0] = pt.under
@@ -202,6 +240,8 @@ local function do_linemaker_step(dtime)
 				)
 				if success then
 					inv:set_stack("main", stackid, item)
+				elseif abortonfail then
+					break
 				end
 			end
 			playerdata[pname] = nil
