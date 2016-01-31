@@ -9,7 +9,7 @@ local tool_active
 
 -- the tool
 minetest.register_tool("linemaker:tool", {
-	description = "pull lines",
+	description = "Linemaker",
 	inventory_image = "linemaker.png",
 	stack_max = 1,
 	on_place = function(_, player, pt)
@@ -84,14 +84,9 @@ local function textures_for_entity(nodename)
 	local def = minetest.registered_nodes[nodename]
 	if def then
 		textures = def.tiles or def.tile_images
+			or (def.inventory_image and {def.inventory_image})
 	end
-	if not textures then
-		if def.inventory_image then
-			textures = {def.inventory_image}
-		else
-			textures = {"unknown_node.png"}
-		end
-	end
+	textures = textures or {"unknown_node.png"}
 	if #textures == 6 then
 		return textures
 	end
@@ -275,6 +270,17 @@ minetest.register_globalstep(function(dtime)
 		do_linemaker_step(dtime)
 	end
 end)
+
+-- register craft recipe if string exists
+if minetest.registered_items["farming:cotton"] then
+	minetest.register_craft({
+		output = "linemaker:tool",
+		recipe = {
+			{"farming:cotton", "group:stick", "farming:cotton"},
+			{"group:stick", "group:stick", ""},
+		}
+	})
+end
 
 
 local time = math.floor(tonumber(os.clock()-load_time_start)*100+0.5)/100
