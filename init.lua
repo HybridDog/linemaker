@@ -244,20 +244,16 @@ local function do_linemaker_step(dtime)
 			ps[0] = pt.under
 			for i = 1,#ps do
 				local curitem = inv:get_stack("main", stackid)
-				local pt = {under = ps[i-1], above = ps[i], type = "node"}
 				local on_place = minetest.registered_items[curitem:get_name()]
 				if on_place then
 					on_place = on_place.on_place
 				end
-				local item, success
-				if on_place then
-					item = on_place(curitem, player, pt)
-					success = true
-				else
-					item, success = minetest.item_place(curitem, player, pt)
+				if not on_place then
+					-- item can't be placed
+					break
 				end
-				if success
-				and item then
+				local item, success = on_place(curitem, player, {under = ps[i-1], above = ps[i], type = "node"})
+				if success then
 					inv:set_stack("main", stackid, item)
 				elseif abortonfail then
 					break
