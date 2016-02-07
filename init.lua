@@ -81,7 +81,7 @@ end)
 -- used when setting up an object
 local function textures_for_entity(nodename)
 	local textures
-	local def = minetest.registered_nodes[nodename]
+	local def = minetest.registered_items[nodename]
 	if def then
 		textures = def.tiles or def.tile_images
 			or (def.inventory_image and {def.inventory_image})
