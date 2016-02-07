@@ -245,7 +245,10 @@ local function do_linemaker_step(dtime)
 			for i = 1,#ps do
 				local curitem = inv:get_stack("main", stackid)
 				local pt = {under = ps[i-1], above = ps[i], type = "node"}
-				local on_place = minetest.registered_items[curitem:get_name()].on_place
+				local on_place = minetest.registered_items[curitem:get_name()]
+				if on_place then
+					on_place = on_place.on_place
+				end
 				local item, success
 				if on_place then
 					item = on_place(curitem, player, pt)

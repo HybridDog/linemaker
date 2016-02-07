@@ -11,4 +11,5 @@ it even uses the replacer or any tool in the next slot.
 I'm wondering, what happens if you have a linemaker tool in the next slot and another one in the third one?
 
 TODO:  
-— find out why the fist objects of the line don't always exist
+— find out why the fist objects of the line don't always exist  
+— test it in survival mode
