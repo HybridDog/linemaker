@@ -164,7 +164,7 @@ local function update_objects(pname, player)
 					player:get_inventory():get_stack(
 						"main",
 						player:get_wield_index()+1
-					):to_string()
+					):get_name()
 				)
 				spawnpos = spawnpos or playerdata[pname].pt.above
 
@@ -243,12 +243,18 @@ local function do_linemaker_step(dtime)
 			local stackid = player:get_wield_index()+1
 			ps[0] = pt.under
 			for i = 1,#ps do
-				local item, success = minetest.item_place(
-					inv:get_stack("main", stackid),
-					player,
-					{under = ps[i-1], above = ps[i], type = "node"}
-				)
-				if success then
+				local curitem = inv:get_stack("main", stackid)
+				local pt = {under = ps[i-1], above = ps[i], type = "node"}
+				local on_place = minetest.registered_items[curitem:get_name()].on_place
+				local item, success
+				if on_place then
+					item = on_place(curitem, player, pt)
+					success = true
+				else
+					item, success = minetest.item_place(curitem, player, pt)
+				end
+				if success
+				and item then
 					inv:set_stack("main", stackid, item)
 				elseif abortonfail then
 					break
