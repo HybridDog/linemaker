@@ -253,10 +253,12 @@ local function do_linemaker_step(dtime)
 					break
 				end
 				local item, success = on_place(curitem, player, {under = ps[i-1], above = ps[i], type = "node"})
-				if success then
+				if success == false then
+					if abortonfail then
+						break
+					end
+				elseif item then
 					inv:set_stack("main", stackid, item)
-				elseif abortonfail then
-					break
 				end
 			end
 			minetest.sound_play("linemaker_set", {pos = ps[#ps]})
