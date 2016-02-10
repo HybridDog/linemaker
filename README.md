@@ -12,4 +12,5 @@ I'm wondering, what happens if you have a linemaker tool in the next slot and an
 
 TODO:  
 — find out why the fist objects of the line don't always exist  
-— test it in survival mode
+— test it in survival mode  
+— get rid of those serialization errors

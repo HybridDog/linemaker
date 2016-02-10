@@ -1,5 +1,9 @@
 local load_time_start = os.clock()
 
+
+-- how many nodes are allowed to be set at once
+local max_nodes = 10000
+
 local function infolog(txt)
 	minetest.log("info", "[linemaker] "..txt)
 end
@@ -238,6 +242,10 @@ local function do_linemaker_step(dtime)
 			playerdata[pname].disabletimer = disabletimer
 		else
 			playerdata[pname] = nil
+			if #ps > max_nodes then
+				infolog(pname.." tried to set "..#ps.." nodes at once, aborted.")
+				return
+			end
 			local abortonfail = pcontrol.up and pcontrol.down
 			local inv = player:get_inventory()
 			local stackid = player:get_wield_index()+1
