@@ -206,12 +206,11 @@ local function do_linemaker_step(dtime)
 		-- update objects and positions
 		local playerpos = player:getpos()
 		playerpos.y = playerpos.y+1.625
-		local wantedpos = vector.round(
-			vector.add(
-				playerpos,
-				vector.multiply(player:get_look_dir(), data.range)
-			)
+		local fine_wantedpos = vector.add(
+			playerpos,
+			vector.multiply(player:get_look_dir(), data.range)
 		)
+		local wantedpos = vector.round(fine_wantedpos)
 		if pcontrol.right
 		and pcontrol.left then
 			local pdif = vector.subtract(pt.above, wantedpos)
@@ -223,7 +222,8 @@ local function do_linemaker_step(dtime)
 			local _,_,o = vector.get_max_coords(vector.apply(pdif, math.abs))
 			wantedpos[o] = pt.above[o]
 		end
-		if not vector.equals(ps[#ps], wantedpos) then
+		if not vector.equals(ps[#ps], wantedpos)
+		and vector.distance(ps[#ps], fine_wantedpos) > 0.5 then
 			minetest.sound_play("linemaker_update", {pos = wantedpos})
 			playerdata[pname].ps = vector.line(pt.above, wantedpos)
 			update_objects(pname, player)
