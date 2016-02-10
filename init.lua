@@ -141,6 +141,13 @@ minetest.register_entity("linemaker:entity", {
 			acc[c] =(v-ispos[c]-vel[c]*t)/(t*t)
 		end
 
+		-- [[ avoid those crashes
+		local accstrength = vector.length(acc)
+		if accstrength > 50 then
+			acc = vector.multiply(acc, 50/accstrength)
+		end
+		--]]
+
 		self.object:setacceleration(acc)--]]
 
 		-- self.object:moveto(shpos)
@@ -222,8 +229,8 @@ local function do_linemaker_step(dtime)
 			local _,_,o = vector.get_max_coords(vector.apply(pdif, math.abs))
 			wantedpos[o] = pt.above[o]
 		end
-		if not vector.equals(ps[#ps], wantedpos)
-		and vector.distance(ps[#ps], fine_wantedpos) > 0.5 then
+		if not vector.equals(ps[#ps], wantedpos) then
+		--and vector.distance(ps[#ps], fine_wantedpos) > 0.7 then
 			minetest.sound_play("linemaker_update", {pos = wantedpos})
 			playerdata[pname].ps = vector.line(pt.above, wantedpos)
 			update_objects(pname, player)
