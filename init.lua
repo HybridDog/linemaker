@@ -4,6 +4,8 @@ local load_time_start = os.clock()
 -- how many nodes are allowed to be set at once
 local max_nodes = 10000
 
+local max_objects = 40 -- should fix forced deletion
+
 local function infolog(txt)
 	minetest.log("info", "[linemaker] "..txt)
 end
@@ -118,7 +120,18 @@ minetest.register_entity("linemaker:entity", {
 			self.object:remove()
 			return
 		end
-		local shpos = playerdata[self.pname].ps[self.id]
+		local ps = playerdata[self.pname].ps
+		local ditadd = #ps / max_objects
+		local id = self.id
+		if ditadd > 1 then
+			id = math.ceil(id * ditadd)
+		end
+		local shpos = ps[id]
+		if not shpos then
+			--print(id, #ps)
+			self.object:remove()
+			return
+		end
 		local ispos = self.object:getpos()
 		if vector.equals(shpos, vector.divide(
 			vector.round(vector.multiply(ispos, 100)),
@@ -134,9 +147,9 @@ minetest.register_entity("linemaker:entity", {
 
 		-- [[ accelerate to its goal
 		shpos = vector.divide(vector.add(shpos, ispos), 2)
-		local t = 0.1
 		local acc = {}
 		local vel = self.object:getvelocity()
+		local t = vector.length(vel)/200 + 0.01
 		for c,v in pairs(shpos) do
 			acc[c] =(v-ispos[c]-vel[c]*t)/(t*t)
 		end
@@ -169,7 +182,7 @@ local function update_objects(pname, player)
 	if #ops < #ps then
 		--for i = #ops+1,#ps do
 		local textures, spawnpos
-		for i = 1,#ps do
+		for i = 1,math.min(#ps, max_objects) do
 			if not ops[i] then
 				textures = textures or textures_for_entity(
 					player:get_inventory():get_stack(
@@ -177,7 +190,7 @@ local function update_objects(pname, player)
 						player:get_wield_index()+1
 					):get_name()
 				)
-				spawnpos = spawnpos or playerdata[pname].pt.above
+				spawnpos = spawnpos or playerdata[pname].pt.above --player:getpos()
 
 				local obj = minetest.add_entity(spawnpos, "linemaker:entity")
 				obj:set_properties({textures = textures})
@@ -199,8 +212,35 @@ local function update_objects(pname, player)
 	objects[pname] = ops
 end
 
+local function get_line_ps(p1, p2)
+	--local t1 = minetest.get_us_time()
+	local round_goal = vector.round(p2)
+	local range = vector.distance(p1, p2)+1
+	local dir = vector.direction(p1, p2)
+	local ps,n = {},1
+	for pos in vector.rayIter(p1, dir) do
+		ps[n] = pos
+		if vector.equals(round_goal, pos)
+		or (vector.distance(p2, pos) < 3 and vector.distance(p1, pos) > range)
+		or n > max_nodes then
+			break
+		end
+		n = n+1
+	end
+	--print((minetest.get_us_time() - t1) / 1000000) -- takes less than a millisecond
+	return ps
+end
+
 -- what happens when it's active
+local update_lines = 0
 local function do_linemaker_step(dtime)
+	local lineupdate
+	update_lines = update_lines+dtime
+	-- 300 ms nyan
+	if update_lines > 0.3 then
+		update_lines = 0
+		lineupdate = true
+	end
 	local active
 	for pname,data in pairs(playerdata) do
 		local player = minetest.get_player_by_name(pname)
@@ -213,11 +253,10 @@ local function do_linemaker_step(dtime)
 		-- update objects and positions
 		local playerpos = player:getpos()
 		playerpos.y = playerpos.y+1.625
-		local fine_wantedpos = vector.add(
+		local wantedpos = vector.add(
 			playerpos,
 			vector.multiply(player:get_look_dir(), data.range)
 		)
-		local wantedpos = vector.round(fine_wantedpos)
 		if pcontrol.right
 		and pcontrol.left then
 			local pdif = vector.subtract(pt.above, wantedpos)
@@ -229,10 +268,12 @@ local function do_linemaker_step(dtime)
 			local _,_,o = vector.get_max_coords(vector.apply(pdif, math.abs))
 			wantedpos[o] = pt.above[o]
 		end
-		if not vector.equals(ps[#ps], wantedpos) then
+		--local wantedpos = vector.round(fine_wantedpos)
+		if not vector.equals(ps[#ps], vector.round(wantedpos))
+		or lineupdate then
 		--and vector.distance(ps[#ps], fine_wantedpos) > 0.7 then
 			minetest.sound_play("linemaker_update", {pos = wantedpos})
-			playerdata[pname].ps = vector.line(pt.above, wantedpos)
+			playerdata[pname].ps = get_line_ps(pt.above, wantedpos)
 			update_objects(pname, player)
 		end
 
@@ -249,10 +290,6 @@ local function do_linemaker_step(dtime)
 			playerdata[pname].disabletimer = disabletimer
 		else
 			playerdata[pname] = nil
-			if #ps > max_nodes then
-				infolog(pname.." tried to set "..#ps.." nodes at once, aborted.")
-				return
-			end
 			local abortonfail = pcontrol.up and pcontrol.down
 			local inv = player:get_inventory()
 			local stackid = player:get_wield_index()+1

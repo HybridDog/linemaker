@@ -30,4 +30,5 @@ If you got ideas or found bugs, please tell them to me.
 
 TODO:  
 — find out why the fist objects of the line don't always exist  
-— test it in survival mode
+— test it in survival mode  
+— put the objects rather to the line ends (if there are be too many)
