@@ -145,13 +145,29 @@ minetest.register_entity("linemaker:entity", {
 			return
 		end
 
+		--[[
+		x = at²+v0t+x0
+		v = 2at+v0
+
+		v = f*(px-x)
+		2at+v0 = f*(px-(at²+v0t+x0))
+		2at = f*(px-at²-v0t-x0)-v0
+		2at+f*at² = f*(px-v0t-x0)-v0
+		a = (f*(px-v0t-x0)-v0)/(2t+ft²)
+
+		a = (f*(shpos[c]-vel[c]*t-ispos[c])-vel[c])/(t*(2+f*t))
+		]]
+
 		-- [[ accelerate to its goal
-		shpos = vector.divide(vector.add(shpos, ispos), 2)
+		--shpos = vector.divide(vector.add(shpos, ispos), 2)
 		local acc = {}
 		local vel = self.object:getvelocity()
-		local t = vector.length(vel)/200 + 0.01
+		--local t = vector.length(vel)/200 + 0.01
+		local t = 0.2
+		local f = 80
 		for c,v in pairs(shpos) do
-			acc[c] =(v-ispos[c]-vel[c]*t)/(t*t)
+			acc[c] = (f*(shpos[c]-vel[c]*t-ispos[c])-vel[c])/(t*(2+f*t))
+			--acc[c] =(v-ispos[c]-vel[c]*t)/(t*t)
 		end
 
 		-- [[ avoid those crashes
