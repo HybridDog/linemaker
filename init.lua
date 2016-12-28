@@ -166,7 +166,7 @@ minetest.register_entity("linemaker:entity", {
 		local t = 0.2
 		local f = 80
 		for c,v in pairs(shpos) do
-			acc[c] = (f*(shpos[c]-vel[c]*t-ispos[c])-vel[c])/(t*(2+f*t))
+			acc[c] = (f*(v-vel[c]*t-ispos[c])-vel[c])/(t*(2+f*t))
 			--acc[c] =(v-ispos[c]-vel[c]*t)/(t*t)
 		end
 
