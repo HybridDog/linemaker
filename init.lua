@@ -310,7 +310,7 @@ local function do_linemaker_step(dtime)
 			local inv = player:get_inventory()
 			local stackid = player:get_wield_index()+1
 			ps[0] = pt.under
-			local pt = {type = "node"}
+			local pt_current = {type = "node"}
 			for i = 1,#ps do
 				local curitem = inv:get_stack("main", stackid)
 				local on_place = minetest.registered_items[curitem:get_name()]
@@ -321,9 +321,9 @@ local function do_linemaker_step(dtime)
 					-- item can't be placed
 					break
 				end
-				pt.under = ps[i-1]
-				pt.above = ps[i]
-				local item, success = on_place(curitem, player, pt)
+				pt_current.under = ps[i-1]
+				pt_current.above = ps[i]
+				local item, success = on_place(curitem, player, pt_current)
 				if success == false then
 					if abortonfail then
 						break
